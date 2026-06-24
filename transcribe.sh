@@ -9,8 +9,9 @@
 set -euo pipefail
 
 # --- CONFIG ---
-WHISPER_ROOT="${HOME}/github.com/ggerganov/whisper.cpp"
-PGM="${WHISPER_ROOT}/build/bin/whisper-cli"
+# Windows native paths (Git Bash format)
+WHISPER_ROOT="${USERPROFILE}/whisper.cpp"
+PGM="${WHISPER_ROOT}/Release/whisper-cli.exe"
 MODEL="${WHISPER_ROOT}/models/ggml-medium.en.bin"
 
 # --- FUNCTIONS ---

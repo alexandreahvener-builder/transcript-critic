@@ -18,7 +18,7 @@ Determine the input type and act accordingly:
 ### 2. If the input is an audio file (e.g., `.m4a`, `.mp3`, `.wav`, `.ogg`, `.flac`, `.aac`, `.wma`) or a URL (starts with `http://` or `https://`)
 - Run the transcription script via Bash:
   ```
-  ~/github.com/jftuga/transcript-critic/transcribe.sh "<audio-file-or-url>"
+  "/c/Users/alexa/OneDrive/Y Analítica/Clientes/Escola Bíblica/transcript-critic/transcribe.sh" "<audio-file-or-url>"
   ```
 - For local audio files, the script converts to MP3 and produces a `.vtt` file with the same base name.
 - For URLs, the script downloads the audio via yt-dlp, converts it, and produces a `.vtt` file. Find the most recently created `.vtt` file in the current directory.
@@ -32,7 +32,7 @@ Once you have the `.vtt` file:
 
 2. **Read the prompt template** from:
    ```
-   ~/github.com/jftuga/transcript-critic/ANALYSIS_PROMPT.md
+   C:\Users\alexa\OneDrive\Y Analítica\Clientes\Escola Bíblica\transcript-critic\ANALYSIS_PROMPT.md
    ```
 
 3. **Replace `[TITLE]`** in the prompt with the inferred title. **Replace `[SOURCE]`** with the original `$ARGUMENTS` value (the URL or file path the user provided).
