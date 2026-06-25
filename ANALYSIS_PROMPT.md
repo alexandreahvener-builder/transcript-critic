@@ -82,20 +82,35 @@ List any points that seemed ambiguous, underdeveloped, or warrant further explor
 
 After completing the transcript analysis above, produce an edited version of the original video with **no cuts to the content** — only the intro and outro are removed. The video is then accelerated by 10%.
 
-### Step 1 — Find the presenter's first frame
+### Step 1 — Find T_intro with two-pass frame extraction
 
-Extract one frame per second from the first 60 seconds of the video:
+The goal is to find the **exact timestamp** of the first frame where the presenter's face or body is visible — even if still in a crossfade or transition. Do **not** use 1fps alone; it is too coarse and will miss sub-second transitions.
+
+**Pass 1 — Coarse scan (1fps, first 60s):**
 ```bash
 ffmpeg -i input.mp4 -vf "fps=1" -frames:v 60 /tmp/frames/frame_%03d.jpg
 ```
-Read the extracted frames using the Read tool and visually identify the **first frame where the presenter appears on screen** (face or body visible, not a logo or title card). Record this as **`T_intro`** (in seconds).
+Read the frames and identify approximately which second the transition from intro to presenter begins. Call this `T_approx`.
 
-### Step 2 — Find the end of the last speech
+**Pass 2 — Fine scan (10fps, 4-second window around T_approx):**
+```bash
+ffmpeg -ss <T_approx - 2> -i input.mp4 -t 4 -vf "fps=10" /tmp/frames2/f%03d.jpg
+```
+Read these frames and find the **first one** where the presenter is visible (face or body on screen, even partially through a crossfade). Each frame in Pass 2 represents 0.1s. Frame `f001` ≈ `T_approx - 2.0s`, frame `f002` ≈ `T_approx - 1.9s`, and so on.
 
-From the transcript, identify **`T_outro`** = the timestamp of the end of the last spoken line (the last non-music/silence entry). This is where the outro music or blank screen begins.
+Record the absolute timestamp as **`T_intro`** (in seconds, one decimal place).
+
+**Audio-sync check:** Look up the first non-music/silence segment in the VTT. If the first spoken line starts **before** `T_intro`, it means the presenter's voice begins over the intro animation. In that case, pull `T_intro` back to match the audio start, so the edit does not clip the opening word. Document whether you adjusted for this.
+
+### Step 2 — Find T_outro
+
+From the VTT, identify **`T_outro`** = the end timestamp of the **last spoken line** (the last segment that is not music or silence). This is where the outro music or blank screen begins.
+
+Do not use the start of the outro music as T_outro — use the end of the last word.
 
 ### Step 3 — Trim intro and outro
-Cut from `T_intro` to `T_outro` in a single operation using re-encode for frame accuracy:
+
+Cut from `T_intro` to `T_outro` using re-encode for frame accuracy:
 ```bash
 ffmpeg -y -ss <T_intro> -i input.mp4 -t <T_outro - T_intro> \
   -c:v libx264 -preset fast -crf 18 -c:a aac -b:a 192k trimmed.mp4
@@ -110,15 +125,29 @@ ffmpeg -y -i trimmed.mp4 \
   final_editado.mp4
 ```
 
+Delete the intermediate `trimmed.mp4` after this step.
+
+### Step 5 — Name the output file
+
+Name the output file after the lesson, not generically. Use the format:
+```
+final_editado_<slug>.mp4
+```
+Where `<slug>` is a short identifier derived from the video title (e.g., `aula1`, `aula2_imperio`). Save it to the **same directory as the source video**.
+
 ### Validation checklist
 Before delivering, confirm all items:
 - [ ] Video starts on the **presenter's first frame** — no logo, title card, or music-only segment.
+- [ ] If audio started before the visual transition, T_intro was pulled back so no word is clipped.
 - [ ] Video ends at the **last spoken word** — no outro music or blank screen.
 - [ ] **No cuts inside the content** — the body of the video is intact.
 - [ ] Video is **1.1× faster** (both video and audio).
 - [ ] Audio/video sync preserved throughout.
 - [ ] MP4 format (H.264/AAC).
+- [ ] Intermediate `trimmed.mp4` deleted.
+- [ ] Output filename follows the `final_editado_<slug>.mp4` convention.
 
 ### Deliverables
-1. `final_editado.mp4` — the edited video.
+1. `final_editado_<slug>.mp4` — the edited video, in the same folder as the source.
 2. **`T_intro`** and **`T_outro`** timestamps used, with a one-line justification for each.
+3. Note whether T_intro was adjusted for audio-sync and by how much.
