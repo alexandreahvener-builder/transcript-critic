@@ -80,67 +80,45 @@ List any points that seemed ambiguous, underdeveloped, or warrant further explor
 
 ## Video Editing
 
-After completing the transcript analysis above, generate a video editing plan to produce an optimized version of the original video. The goal is to reduce duration as much as possible **without compromising the logical flow or the quality of the material** — there is no fixed time target.
+After completing the transcript analysis above, produce an edited version of the original video with **no cuts to the content** — only the intro and outro are removed. The video is then accelerated by 10%.
 
-The timestamps from the transcript are the authoritative source for all cut points. Never estimate times by eye.
+### Step 1 — Find the presenter's first frame
 
-### Step 1 — Define speech boundaries
-From the transcript, identify:
-- **`T_start`** = `start` of the first speech segment — cut everything before it (intro music/jingle).
-- **`T_end`** = `end` of the last speech segment — cut everything after it (outro music/jingle).
+Extract one frame per second from the first 60 seconds of the video:
+```bash
+ffmpeg -i input.mp4 -vf "fps=1" -frames:v 60 /tmp/frames/frame_%03d.jpg
+```
+Read the extracted frames using the Read tool and visually identify the **first frame where the presenter appears on screen** (face or body visible, not a logo or title card). Record this as **`T_intro`** (in seconds).
 
-### Step 2 — Plan content cuts (most important step)
-Build a **list of segments to KEEP**, each with exact `start` and `end` times from the transcript.
+### Step 2 — Find the end of the last speech
 
-**Selection criteria (what to keep):**
-- The hook/opening that presents the topic.
-- The logical backbone of the argument, in original order — no segment should leave the viewer disoriented.
-- Key scripture verses or supporting references — one per argument block, not every repetition.
-- The closing appeal or conclusion.
+From the transcript, identify **`T_outro`** = the timestamp of the end of the last spoken line (the last non-music/silence entry). This is where the outro music or blank screen begins.
 
-**What to cut first:**
-- Repetitions of the same point already made.
-- Long lists of citations on the same theme — reduce to one representative example.
-- Secondary digressions that don't break the thread if removed.
-- Teasers for future videos, if there is room to cut them.
-
-**Hard rules:**
-- Never cut a sentence in half. Every kept segment must start at a speech `start` and end at a speech `end`.
-- The video must not end mid-thought — the last segment must be a complete idea.
-- Every transition between kept segments must make sense (topic → topic) with no argument left hanging.
-
-> Before executing any cuts, deliver a **decision table** listing kept segments (`start` → `end` timestamps and the corresponding speech excerpt) for review.
-
-### Step 3 — Trim and concatenate
-Cut each segment using the real timestamps and concatenate in original order.
-- **Edge padding:** start each segment ~0.15–0.25 s **before** the speech `start` and end ~0.15–0.25 s **after** the speech `end`, landing in the silence between phrases.
-- Apply small audio fades at joins to avoid clicks.
-- Use re-encode (not `-c copy`) for frame-accurate cuts.
+### Step 3 — Trim intro and outro
+Cut from `T_intro` to `T_outro` in a single operation using re-encode for frame accuracy:
+```bash
+ffmpeg -y -ss <T_intro> -i input.mp4 -t <T_outro - T_intro> \
+  -c:v libx264 -preset fast -crf 18 -c:a aac -b:a 192k trimmed.mp4
+```
 
 ### Step 4 — Apply 1.1× speed
 ```bash
-ffmpeg -i montagem.mp4 -filter_complex "[0:v]setpts=PTS/1.1[v];[0:a]atempo=1.1[a]" -map "[v]" -map "[a]" acelerado.mp4
-```
-
-### Step 5 — Export
-- Container **MP4**, video **H.264**, audio **AAC**.
-- Resolution ≤ **720p**; preserve original aspect ratio.
-```bash
-ffmpeg -i acelerado.mp4 -c:v libx264 -preset medium -crf 24 -c:a aac -b:a 128k -movflags +faststart final_editado.mp4
+ffmpeg -y -i trimmed.mp4 \
+  -filter_complex "[0:v]setpts=PTS/1.1[v];[0:a]atempo=1.1[a]" \
+  -map "[v]" -map "[a]" \
+  -c:v libx264 -preset medium -crf 24 -c:a aac -b:a 128k -movflags +faststart \
+  final_editado.mp4
 ```
 
 ### Validation checklist
 Before delivering, confirm all items:
-- [ ] Video is **1.1× faster**.
-- [ ] **No** intro or outro music/jingle.
-- [ ] **No** sentence cut in half — every segment starts and ends on real speech timestamps.
-- [ ] The video **does not end mid-thought** — closes on a complete idea.
-- [ ] **Transitions make sense** — no jump that confuses the viewer.
-- [ ] The **central message** is comprehensible from start to finish.
-- [ ] Audio has no clicks at joins; audio/video sync preserved.
+- [ ] Video starts on the **presenter's first frame** — no logo, title card, or music-only segment.
+- [ ] Video ends at the **last spoken word** — no outro music or blank screen.
+- [ ] **No cuts inside the content** — the body of the video is intact.
+- [ ] Video is **1.1× faster** (both video and audio).
+- [ ] Audio/video sync preserved throughout.
 - [ ] MP4 format (H.264/AAC).
 
 ### Deliverables
 1. `final_editado.mp4` — the edited video.
-2. **Cut table** — kept segments with real timestamps and corresponding speech excerpt.
-3. **Selection rationale** — why each block was kept or removed (1–2 sentences each).
+2. **`T_intro`** and **`T_outro`** timestamps used, with a one-line justification for each.
