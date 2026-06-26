@@ -106,17 +106,25 @@ Record the absolute timestamp as **`T_intro`** (in seconds, one decimal place).
 
 **CRITICAL WARNING:** VTT timestamps for `[FOREIGN]` or unlabeled segments are **unreliable** — the auto-generated end time often cuts 1–3 seconds before the presenter actually finishes speaking. Never trust the VTT end timestamp alone for T_outro.
 
-**Two-pass approach:**
+**Three-pass approach:**
 
 **Pass 1 — Get VTT candidate:** From the VTT, find the end timestamp of the last segment that is not `[MUSIC]` or silence. Call this `T_vtt`. This is only a starting point.
 
-**Pass 2 — Visual verification (mandatory):** Extract frames from `T_vtt - 2s` to `T_vtt + 10s` at 5fps from the original video:
+**Pass 2 — Locate the fade/outro transition:** Extract frames from `T_vtt - 2s` to `T_vtt + 15s` at 2fps:
 ```bash
-ffmpeg -ss <T_vtt - 2> -i input.mp4 -t 12 -vf "fps=5" /tmp/outro_check/f%03d.jpg
+ffmpeg -ss <T_vtt - 2> -i input.mp4 -t 17 -vf "fps=2" /tmp/outro_check/f%03d.jpg
 ```
-Read these frames and find the **last frame where the presenter's mouth is open or moving**. The presenter will then close their mouth, look down, or stand still — that natural "closing beat" is the true end of speech. Set **`T_outro`** to that timestamp.
+Find the **first frame where the presenter disappears or the outro animation/credits begin**. Call this `T_fade`. This is your hard upper boundary.
 
-Do not use the start of the outro music or credit screen as T_outro — use the last frame of active speech. Add 0.3s after the last open-mouth frame to capture the full final syllable.
+**Pass 3 — Fine scan around the fade:** Extract frames from `T_fade - 4s` to `T_fade + 2s` at 10fps:
+```bash
+ffmpeg -ss <T_fade - 4> -i input.mp4 -t 6 -vf "fps=10" /tmp/outro_fine/f%03d.jpg
+```
+Find the **last frame where the presenter's mouth is open or moving**. After that, the presenter closes their mouth and may stand still briefly before the fade begins.
+
+Set **`T_outro = T_fade - 0.1s`**.
+
+**Why T_fade - 0.1s (not the mouth-close frame + buffer):** Audio in Portuguese often has trailing nasal resonance (e.g. "ão", "em") that continues 0.2–0.5s after the visible mouth closes. The only safe guarantee that the last word is complete is to cut just before the fade animation starts — because the presenter has always fully finished speaking before the fade. A +0.3s buffer from the last visible mouth-open frame is not sufficient; it has caused repeated cut-word issues in practice.
 
 ### Step 3 — Trim intro and outro
 
@@ -149,7 +157,7 @@ Where `<slug>` is a short identifier derived from the video title (e.g., `aula1`
 Before delivering, confirm all items:
 - [ ] Video starts on the **presenter's first frame** — no logo, title card, or music-only segment.
 - [ ] If audio started before the visual transition, T_intro was pulled back so no word is clipped.
-- [ ] Video ends at the **last spoken word** — verified by visual frame inspection, not just VTT timestamp.
+- [ ] Video ends at the **last spoken word** — T_outro set to T_fade - 0.1s, verified by locating the fade transition visually, not just VTT timestamp.
 - [ ] **No cuts inside the content** — the body of the video is intact.
 - [ ] Video is **1.1× faster** (both video and audio).
 - [ ] Audio/video sync preserved throughout.
