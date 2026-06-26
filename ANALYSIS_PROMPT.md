@@ -104,9 +104,19 @@ Record the absolute timestamp as **`T_intro`** (in seconds, one decimal place).
 
 ### Step 2 — Find T_outro
 
-From the VTT, identify **`T_outro`** = the end timestamp of the **last spoken line** (the last segment that is not music or silence). This is where the outro music or blank screen begins.
+**CRITICAL WARNING:** VTT timestamps for `[FOREIGN]` or unlabeled segments are **unreliable** — the auto-generated end time often cuts 1–3 seconds before the presenter actually finishes speaking. Never trust the VTT end timestamp alone for T_outro.
 
-Do not use the start of the outro music as T_outro — use the end of the last word.
+**Two-pass approach:**
+
+**Pass 1 — Get VTT candidate:** From the VTT, find the end timestamp of the last segment that is not `[MUSIC]` or silence. Call this `T_vtt`. This is only a starting point.
+
+**Pass 2 — Visual verification (mandatory):** Extract frames from `T_vtt - 2s` to `T_vtt + 10s` at 5fps from the original video:
+```bash
+ffmpeg -ss <T_vtt - 2> -i input.mp4 -t 12 -vf "fps=5" /tmp/outro_check/f%03d.jpg
+```
+Read these frames and find the **last frame where the presenter's mouth is open or moving**. The presenter will then close their mouth, look down, or stand still — that natural "closing beat" is the true end of speech. Set **`T_outro`** to that timestamp.
+
+Do not use the start of the outro music or credit screen as T_outro — use the last frame of active speech. Add 0.3s after the last open-mouth frame to capture the full final syllable.
 
 ### Step 3 — Trim intro and outro
 
@@ -139,7 +149,7 @@ Where `<slug>` is a short identifier derived from the video title (e.g., `aula1`
 Before delivering, confirm all items:
 - [ ] Video starts on the **presenter's first frame** — no logo, title card, or music-only segment.
 - [ ] If audio started before the visual transition, T_intro was pulled back so no word is clipped.
-- [ ] Video ends at the **last spoken word** — no outro music or blank screen.
+- [ ] Video ends at the **last spoken word** — verified by visual frame inspection, not just VTT timestamp.
 - [ ] **No cuts inside the content** — the body of the video is intact.
 - [ ] Video is **1.1× faster** (both video and audio).
 - [ ] Audio/video sync preserved throughout.
