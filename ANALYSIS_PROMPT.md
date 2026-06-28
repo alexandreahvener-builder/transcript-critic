@@ -92,15 +92,19 @@ ffmpeg -i input.mp4 -vf "fps=1" -frames:v 60 /tmp/frames/frame_%03d.jpg
 ```
 Read the frames and identify approximately which second the transition from intro to presenter begins. Call this `T_approx`.
 
-**Pass 2 — Fine scan (10fps, 4-second window around T_approx):**
+**Pass 2 — Fine scan (10fps, 6-second window around T_approx):**
 ```bash
-ffmpeg -ss <T_approx - 2> -i input.mp4 -t 4 -vf "fps=10" /tmp/frames2/f%03d.jpg
+ffmpeg -ss <T_approx - 3> -i input.mp4 -t 6 -vf "fps=10" /tmp/frames2/f%03d.jpg
 ```
-Read these frames and find the **first one** where the presenter is visible (face or body on screen, even partially through a crossfade). Each frame in Pass 2 represents 0.1s. Frame `f001` ≈ `T_approx - 2.0s`, frame `f002` ≈ `T_approx - 1.9s`, and so on.
+Read these frames and find the **last frame where any intro animation element is still visible** (title cards, logo overlays, text overlays). The very next frame — where only the presenter against the clean background is visible — is `T_intro`. Each frame represents 0.1s.
+
+**CRITICAL:** Do NOT set T_intro to the first frame the presenter *appears* (they may appear through a crossfade while intro elements are still visible), and do NOT set it to a "settled" frame 1–2 seconds after they first appear. The correct T_intro is the **earliest frame where the intro animation has completely vanished** — typically within 0.1–0.3s of the presenter first appearing.
 
 Record the absolute timestamp as **`T_intro`** (in seconds, one decimal place).
 
-**Audio-sync check:** Look up the first non-music/silence segment in the VTT. If the first spoken line starts **before** `T_intro`, it means the presenter's voice begins over the intro animation. In that case, pull `T_intro` back to match the audio start, so the edit does not clip the opening word. Document whether you adjusted for this.
+**Audio-sync check:** Visually inspect the mouth at the T_intro frame. If the mouth is already open or mid-word at T_intro, the presenter began speaking during the intro fade. In that case, check the VTT for the first non-music/silence segment timestamp and pull T_intro back to that value (accepting a brief animated overlay at the very start of the edit). Document whether you adjusted for this.
+
+**Why this matters:** Presenters in this series frequently begin speaking while the intro title card is still fading out. A T_intro set 0.5–1s too late will clip the opening word. Confirmed in Aula 5: presenter said "amigo minha amiga" but T_intro was set 0.8s late, clipping to "migo minha amiga".
 
 ### Step 2 — Find T_outro
 
@@ -145,7 +149,34 @@ ffmpeg -y -i trimmed.mp4 \
 
 Delete the intermediate `trimmed.mp4` after this step.
 
-### Step 5 — Name the output file
+### Step 5 — Enforce 12 MB file size limit
+
+The output file **must not exceed 12 MB**. After Step 4, check the file size. If it exceeds 12 MB, re-encode with a calculated target bitrate:
+
+```bash
+# Get duration in seconds
+DURATION=$(ffprobe -v quiet -show_entries format=duration -of csv=p=0 final_editado.mp4)
+
+# Target: 11.5 MB = 11.5 * 8 * 1024 * 1024 bits
+# Total bitrate (bps) = target_bits / duration
+# Video bitrate = total_bitrate - 64000 (audio)
+# Example for a 350s video: (11.5 * 8 * 1024 * 1024) / 350 - 64000 ≈ 211000 bps = 211k
+```
+
+Compute and hardcode the bitrate, then re-encode in place:
+```bash
+ffmpeg -y -i final_editado.mp4 \
+  -c:v libx264 -preset medium -b:v <VIDEO_KBPS>k \
+  -c:a aac -b:a 64k -movflags +faststart \
+  final_editado_sized.mp4
+mv final_editado_sized.mp4 final_editado.mp4
+```
+
+Use `-b:a 64k` (not 128k) when compressing for size — 64k AAC is fully acceptable for speech.
+
+**Why 11.5 MB target (not 12):** Single-pass CBR can overshoot by 2–5%. Using 11.5 MB as the internal target ensures the output stays safely under 12 MB even with typical overshoot.
+
+### Step 6 — Name the output file
 
 Name the output file after the lesson, not generically. Use the format:
 ```
@@ -155,8 +186,8 @@ Where `<slug>` is a short identifier derived from the video title (e.g., `aula1`
 
 ### Validation checklist
 Before delivering, confirm all items:
-- [ ] Video starts on the **presenter's first frame** — no logo, title card, or music-only segment.
-- [ ] If audio started before the visual transition, T_intro was pulled back so no word is clipped.
+- [ ] Video starts on the **earliest clean presenter frame** — first frame where no intro animation element (title card, logo, text overlay) is visible. T_intro is NOT the first frame the presenter appears through a crossfade, and NOT a "settled" frame seconds later.
+- [ ] Mouth inspected at T_intro frame: if mouth is already open/mid-word, T_intro was pulled back to audio start so no opening word is clipped.
 - [ ] Video ends at the **last spoken word** — T_outro set to T_fade - 0.1s, verified by locating the fade transition visually, not just VTT timestamp.
 - [ ] **No cuts inside the content** — the body of the video is intact.
 - [ ] Video is **1.1× faster** (both video and audio).
@@ -164,8 +195,10 @@ Before delivering, confirm all items:
 - [ ] MP4 format (H.264/AAC).
 - [ ] Intermediate `trimmed.mp4` deleted.
 - [ ] Output filename follows the `final_editado_<slug>.mp4` convention.
+- [ ] **File size ≤ 12 MB** — if over, re-encoded with calculated bitrate targeting 11.5 MB (Step 5).
 
 ### Deliverables
-1. `final_editado_<slug>.mp4` — the edited video, in the same folder as the source.
+1. `final_editado_<slug>.mp4` — the edited video, in the same folder as the source, **≤ 12 MB**.
 2. **`T_intro`** and **`T_outro`** timestamps used, with a one-line justification for each.
 3. Note whether T_intro was adjusted for audio-sync and by how much.
+4. Final file size.
